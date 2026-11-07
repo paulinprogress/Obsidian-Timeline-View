@@ -1,0 +1,127 @@
+.timeline-view {
+	width: 100%;
+	overflow: auto;
+	padding: 8px 0 16px;
+}
+
+.timeline-board {
+	position: relative;
+	min-width: 100%;
+}
+
+.timeline-axis {
+	position: relative;
+	height: 38px;
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.timeline-axis-month {
+	position: absolute;
+	top: 0;
+	height: 100%;
+	padding: 0 10px 8px;
+	display: flex;
+	align-items: end;
+	white-space: nowrap;
+	border-left: 1px solid var(--background-modifier-border);
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+	box-sizing: border-box;
+}
+
+.timeline-group-heading {
+	position: sticky;
+	left: 0;
+	z-index: 2;
+	width: fit-content;
+	max-width: 100%;
+	margin: 14px 0 4px;
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+	font-weight: var(--font-semibold);
+}
+
+.timeline-lane {
+	position: relative;
+	height: 46px;
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.timeline-gridline {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	border-left: 1px solid var(--background-modifier-border);
+	pointer-events: none;
+}
+
+.timeline-entry {
+	position: absolute;
+	top: 10px;
+	z-index: 1;
+	display: flex;
+	align-items: center;
+	box-sizing: border-box;
+	height: 26px;
+	color: var(--text-normal);
+	text-decoration: none;
+	white-space: nowrap;
+}
+
+.timeline-entry:hover {
+	color: var(--text-normal);
+	text-decoration: none;
+}
+
+.timeline-entry.is-range {
+	overflow: visible;
+	border: 1px solid var(--interactive-accent);
+	border-radius: var(--radius-s);
+	background: color-mix(in srgb, var(--interactive-accent) 16%, var(--background-primary));
+}
+
+.timeline-entry.is-range:hover {
+	background: color-mix(in srgb, var(--interactive-accent) 25%, var(--background-primary));
+}
+
+.timeline-entry-marker {
+	flex: 0 0 8px;
+	width: 8px;
+	height: 8px;
+	margin: 0 7px 0 5px;
+	border-radius: 50%;
+	background: var(--interactive-accent);
+}
+
+.timeline-entry.is-point {
+	width: max-content;
+	max-width: 260px;
+}
+
+.timeline-entry.is-point .timeline-entry-marker {
+	margin-left: 0;
+}
+
+.timeline-entry-title {
+	overflow: hidden;
+	padding-right: 8px;
+	font-size: var(--font-ui-small);
+	text-overflow: ellipsis;
+}
+
+.timeline-empty-state {
+	padding: 36px 20px;
+	color: var(--text-muted);
+	text-align: center;
+}
+
+.timeline-empty-state strong {
+	display: block;
+	margin-bottom: 6px;
+	color: var(--text-normal);
+	font-weight: var(--font-medium);
+}
+
+.timeline-empty-description {
+	font-size: var(--font-ui-small);
+}

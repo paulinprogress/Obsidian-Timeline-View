@@ -1,0 +1,8 @@
+{
+	"id": "Obsidian-Timeline-View",
+	"name": "Timeline View",
+	"version": "1.0.0",
+	"minAppVersion": "1.10.0",
+	"description": "A lightweight timeline view for Obsidian Bases.",
+	"isDesktopOnly": false
+}

@@ -8,7 +8,7 @@ export default class TimelinePlugin extends Plugin {
 			icon: 'calendar-days',
 			factory: (controller, containerEl) =>
 				new TimelineView(controller, containerEl),
-			options: () => [
+			options: (config) => [
 				{
 					key: 'startProperty',
 					type: 'property',
@@ -21,7 +21,9 @@ export default class TimelinePlugin extends Plugin {
 					type: 'property',
 					displayName: 'End date',
 					placeholder: 'Optional',
-					filter: (property) => property.startsWith('note.'),
+					filter: (property) =>
+						property.startsWith('note.') &&
+						property !== config.getAsPropertyId('startProperty'),
 				},
 			],
 		});

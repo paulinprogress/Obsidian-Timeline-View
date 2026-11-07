@@ -100,6 +100,14 @@ export class TimelineView extends BasesView {
 	}
 
 	private render() {
+		const previousScroll = this.contentEl.querySelector<HTMLElement>(
+			'.timeline-scroll',
+		);
+		const previousScrollLeft = previousScroll?.scrollLeft ?? 0;
+		const previousAnchorDay =
+			this.timelineStartDay + previousScrollLeft / this.dayWidth;
+		const shouldRestoreScroll =
+			this.didInitialScrollToNow && previousScroll != null;
 		this.contentEl.empty();
 
 		const startProperty = this.config.getAsPropertyId('startProperty');
@@ -195,6 +203,10 @@ export class TimelineView extends BasesView {
 		if (!this.didInitialScrollToNow) {
 			this.didInitialScrollToNow = true;
 			window.requestAnimationFrame(() => this.scrollToToday());
+		} else if (shouldRestoreScroll) {
+			window.requestAnimationFrame(() =>
+				this.scrollToDay(previousAnchorDay),
+			);
 		}
 	}
 
@@ -607,14 +619,17 @@ export class TimelineView extends BasesView {
 	}
 
 	private scrollToToday() {
-		const scroll = this.contentEl.querySelector<HTMLElement>('.timeline-scroll');
-		if (!scroll) return;
 		const today = Math.floor(Date.now() / DAY_IN_MILLISECONDS);
-		const todayPosition = (today - this.timelineStartDay) * this.dayWidth;
-		scroll.scrollLeft = Math.max(
-			0,
-			todayPosition - scroll.clientWidth / 3,
+		this.scrollToDay(today, 1 / 3);
+	}
+
+	private scrollToDay(day: number, viewportFraction = 0) {
+		const scroll = this.contentEl.querySelector<HTMLElement>(
+			'.timeline-scroll',
 		);
+		if (!scroll) return;
+		const position = (day - this.timelineStartDay) * this.dayWidth;
+		scroll.scrollLeft = Math.max(0, position - scroll.clientWidth * viewportFraction);
 	}
 }
 

@@ -9,9 +9,9 @@ import {
 } from 'obsidian';
 
 const DAY_IN_MILLISECONDS = 24 * 60 * 60 * 1000;
-const DEFAULT_DAY_WIDTH = 4.3;
+const DEFAULT_DAY_WIDTH = 16;
 const MIN_DAY_WIDTH = 0.25;
-const MAX_DAY_WIDTH = 30;
+const MAX_DAY_WIDTH = 80;
 const ZOOM_FACTOR = 1.25;
 
 type DragMode = 'move' | 'start' | 'end';
@@ -52,9 +52,7 @@ const TICK_INTERVALS: Array<{
 	step: number;
 	approximateDays: number;
 }> = [
-	{ unit: 'day', step: 1, approximateDays: 1 },
 	{ unit: 'week', step: 1, approximateDays: 7 },
-	{ unit: 'week', step: 2, approximateDays: 14 },
 	{ unit: 'month', step: 1, approximateDays: 30.44 },
 	{ unit: 'month', step: 2, approximateDays: 60.88 },
 	{ unit: 'month', step: 3, approximateDays: 91.31 },
@@ -136,11 +134,27 @@ export class TimelineView extends BasesView {
 		}
 
 		const today = Math.floor(Date.now() / DAY_IN_MILLISECONDS);
-		const firstDay = Math.min(today, ...items.map((item) => item.startDay));
-		const afterLastDay =
-			Math.max(today, ...items.map((item) => item.endDay)) + 1;
+		const interval = this.getTickInterval(this.dayWidth);
+		const viewportWidth = this.contentEl.clientWidth || 800;
+		const visibleDays = Math.ceil(viewportWidth / this.dayWidth);
+		const paddedFirstDay = Math.min(
+			...items.map((item) => item.startDay),
+			today - Math.ceil(visibleDays / 3),
+		);
+		const paddedLastDay = Math.max(
+			...items.map((item) => item.endDay),
+			today + Math.ceil((visibleDays * 2) / 3),
+		);
+		const firstDay = alignedTick(paddedFirstDay, interval.unit, interval.step);
+		const afterLastDay = nextTick(
+			alignedTick(paddedLastDay, interval.unit, interval.step),
+			interval.unit,
+			interval.step,
+		);
 		this.timelineStartDay = firstDay;
-		const ticks = this.createTicks(firstDay, afterLastDay, this.dayWidth);
+		const ticks = this.createTicks(firstDay, afterLastDay, interval);
+		const showDayMarks =
+			this.dayWidth >= 12 && afterLastDay - firstDay <= 180;
 		const boardWidth = (afterLastDay - firstDay) * this.dayWidth;
 
 		this.renderToolbar();
@@ -148,7 +162,14 @@ export class TimelineView extends BasesView {
 		const board = scroll.createDiv({ cls: 'timeline-board' });
 		board.style.width = `${boardWidth}px`;
 
-		this.renderAxis(board, ticks, firstDay, this.dayWidth);
+		this.renderAxis(
+			board,
+			ticks,
+			firstDay,
+			afterLastDay,
+			this.dayWidth,
+			showDayMarks,
+		);
 		for (const { group, items: groupItems } of itemsByGroup) {
 			if (groupItems.length === 0) continue;
 			this.renderGroup(
@@ -157,7 +178,9 @@ export class TimelineView extends BasesView {
 				groupItems,
 				ticks,
 				firstDay,
+				afterLastDay,
 				this.dayWidth,
+				showDayMarks,
 			);
 		}
 		this.renderTodayLine(board, today, firstDay, this.dayWidth);
@@ -170,6 +193,12 @@ export class TimelineView extends BasesView {
 
 	private renderToolbar() {
 		const toolbar = this.contentEl.createDiv({ cls: 'timeline-toolbar' });
+		const todayButton = toolbar.createEl('button', {
+			cls: 'timeline-today-button',
+			text: 'Today',
+			attr: { 'aria-label': 'Scroll to today' },
+		});
+		todayButton.addEventListener('click', () => this.scrollToToday());
 		toolbar.createDiv({
 			cls: 'timeline-zoom-label',
 			text: `Zoom ${Math.round((this.dayWidth / DEFAULT_DAY_WIDTH) * 100)}%`,
@@ -225,22 +254,34 @@ export class TimelineView extends BasesView {
 		};
 	}
 
-	private createTicks(firstDay: number, afterLastDay: number, dayWidth: number) {
-		const interval =
+	private getTickInterval(dayWidth: number) {
+		return (
 			TICK_INTERVALS.find(
-				(candidate) => candidate.approximateDays * dayWidth >= 100,
-			) ?? TICK_INTERVALS[TICK_INTERVALS.length - 1]!;
+				(candidate) => candidate.approximateDays * dayWidth >= 105,
+			) ?? TICK_INTERVALS[TICK_INTERVALS.length - 1]!
+		);
+	}
+
+	private createTicks(
+		firstDay: number,
+		afterLastDay: number,
+		interval: (typeof TICK_INTERVALS)[number],
+	) {
 		const ticks: TimelineTick[] = [];
 		let day = alignedTick(firstDay, interval.unit, interval.step);
 
 		while (day < afterLastDay) {
-			if (day >= firstDay) {
-				ticks.push({
-					startDay: day,
-					label: formatTick(day, interval.unit, interval.step),
-					isMajor: isYearStart(day),
-				});
-			}
+			const isMajor = isYearStart(day);
+			ticks.push({
+				startDay: day,
+				label: formatTick(
+					day,
+					interval.unit,
+					interval.step,
+					isMajor,
+				),
+				isMajor,
+			});
 			day = nextTick(day, interval.unit, interval.step);
 		}
 		return ticks;
@@ -250,9 +291,17 @@ export class TimelineView extends BasesView {
 		board: HTMLElement,
 		ticks: TimelineTick[],
 		firstDay: number,
+		afterLastDay: number,
 		dayWidth: number,
+		showDayMarks: boolean,
 	) {
 		const axis = board.createDiv({ cls: 'timeline-axis' });
+		if (showDayMarks) {
+			for (let day = firstDay; day < afterLastDay; day++) {
+				const mark = axis.createDiv({ cls: 'timeline-day-mark' });
+				mark.style.left = `${(day - firstDay) * dayWidth}px`;
+			}
+		}
 		for (const tick of ticks) {
 			const cell = axis.createDiv({
 				cls: `timeline-axis-tick${tick.isMajor ? ' is-major' : ''}`,
@@ -268,7 +317,9 @@ export class TimelineView extends BasesView {
 		items: TimelineItem[],
 		ticks: TimelineTick[],
 		firstDay: number,
+		afterLastDay: number,
 		dayWidth: number,
+		showDayMarks: boolean,
 	) {
 		const section = board.createDiv({ cls: 'timeline-group' });
 		if (group.hasKey()) {
@@ -279,6 +330,12 @@ export class TimelineView extends BasesView {
 
 		for (const item of items) {
 			const lane = section.createDiv({ cls: 'timeline-lane' });
+			if (showDayMarks) {
+				for (let day = firstDay; day < afterLastDay; day++) {
+					const mark = lane.createDiv({ cls: 'timeline-day-mark' });
+					mark.style.left = `${(day - firstDay) * dayWidth}px`;
+				}
+			}
 			for (const tick of ticks) {
 				const line = lane.createDiv({
 					cls: `timeline-gridline${tick.isMajor ? ' is-major' : ''}`,
@@ -549,7 +606,7 @@ export class TimelineView extends BasesView {
 		const todayPosition = (today - this.timelineStartDay) * this.dayWidth;
 		scroll.scrollLeft = Math.max(
 			0,
-			todayPosition - scroll.clientWidth / 2,
+			todayPosition - scroll.clientWidth / 3,
 		);
 	}
 }
@@ -606,7 +663,12 @@ function setFrontmatterProperty(
 function alignedTick(day: number, unit: TickUnit, step: number) {
 	if (unit === 'day') return day;
 	if (unit === 'week') {
-		return Math.floor(startOfWeek(day) / (7 * step)) * 7 * step;
+		const monday = startOfWeek(day);
+		const knownMonday = 4;
+		return (
+			Math.floor((monday - knownMonday) / (7 * step)) * 7 * step +
+			knownMonday
+		);
 	}
 	if (unit === 'month') {
 		const date = new Date(day * DAY_IN_MILLISECONDS);
@@ -638,7 +700,12 @@ function nextTick(day: number, unit: TickUnit, step: number) {
 	);
 }
 
-function formatTick(day: number, unit: TickUnit, step: number) {
+function formatTick(
+	day: number,
+	unit: TickUnit,
+	step: number,
+	isMajor: boolean,
+) {
 	const date = new Date(day * DAY_IN_MILLISECONDS);
 	if (unit === 'day' || unit === 'week') {
 		return date.toLocaleDateString(undefined, {
@@ -648,9 +715,21 @@ function formatTick(day: number, unit: TickUnit, step: number) {
 		});
 	}
 	if (unit === 'month') {
+		if (step === 1) {
+			return date.toLocaleDateString(undefined, {
+				day: 'numeric',
+				month: 'short',
+				timeZone: 'UTC',
+			});
+		}
+		if (isMajor) {
+			return date.toLocaleDateString(undefined, {
+				year: 'numeric',
+				timeZone: 'UTC',
+			});
+		}
 		return date.toLocaleDateString(undefined, {
 			month: 'short',
-			year: step === 1 ? '2-digit' : undefined,
 			timeZone: 'UTC',
 		});
 	}

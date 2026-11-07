@@ -31,6 +31,12 @@
 	font-variant-numeric: tabular-nums;
 }
 
+.timeline-today-button {
+	margin-right: auto;
+	padding: 2px 8px;
+	font-size: var(--font-ui-smaller);
+}
+
 .timeline-zoom-button {
 	display: flex;
 	width: 26px;
@@ -51,6 +57,8 @@
 	min-height: 0;
 	flex: 1;
 	overflow: auto;
+	overscroll-behavior-x: contain;
+	scrollbar-gutter: stable;
 }
 
 .timeline-board {
@@ -86,6 +94,21 @@
 	border-left-color: var(--background-modifier-border);
 	color: var(--text-normal);
 	font-weight: var(--font-medium);
+}
+
+.timeline-day-mark {
+	position: absolute;
+	bottom: 0;
+	height: 5px;
+	border-left: 1px solid
+		color-mix(in srgb, var(--background-modifier-border) 55%, transparent);
+	pointer-events: none;
+}
+
+.timeline-lane > .timeline-day-mark {
+	top: 0;
+	bottom: auto;
+	height: 5px;
 }
 
 .timeline-group-heading {

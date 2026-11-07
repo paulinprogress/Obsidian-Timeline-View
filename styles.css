@@ -74,6 +74,21 @@
 	border-bottom: 1px solid var(--background-modifier-border);
 }
 
+.timeline-board.is-weekly-scale .timeline-axis,
+.timeline-board.is-weekly-scale .timeline-lane {
+	background-image: repeating-linear-gradient(
+		to right,
+		transparent 0,
+		transparent 71.4286%,
+		color-mix(in srgb, var(--background-modifier-border) 18%, transparent)
+			71.4286%,
+		color-mix(in srgb, var(--background-modifier-border) 18%, transparent)
+			100%
+	);
+	background-repeat: repeat;
+	background-size: var(--timeline-week-width) 100%;
+}
+
 .timeline-axis-tick {
 	position: absolute;
 	top: 0;

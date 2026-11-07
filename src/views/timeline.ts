@@ -159,8 +159,15 @@ export class TimelineView extends BasesView {
 
 		this.renderToolbar();
 		const scroll = this.contentEl.createDiv({ cls: 'timeline-scroll' });
-		const board = scroll.createDiv({ cls: 'timeline-board' });
+		const isWeeklyScale = interval.unit === 'week' && interval.step === 1;
+		const board = scroll.createDiv({
+			cls: `timeline-board${isWeeklyScale ? ' is-weekly-scale' : ''}`,
+		});
 		board.style.width = `${boardWidth}px`;
+		board.style.setProperty(
+			'--timeline-week-width',
+			`${this.dayWidth * 7}px`,
+		);
 
 		this.renderAxis(
 			board,

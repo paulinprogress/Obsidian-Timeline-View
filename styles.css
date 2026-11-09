@@ -230,12 +230,9 @@
 	position: sticky;
 	left: 10px;
 	z-index: 1;
-	overflow: hidden;
-	max-width: 240px;
+	flex: 0 0 auto;
 	padding-right: 10px;
-	background: transparent;
 	font-size: var(--font-ui-small);
-	text-overflow: ellipsis;
 }
 
 .timeline-resize-handle {

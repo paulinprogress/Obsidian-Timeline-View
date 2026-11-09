@@ -1,7 +1,7 @@
 {
-	"name": "obsidian-timeline-view",
-	"version": "1.0.0",
-	"description": "This is a sample plugin for Obsidian (https://obsidian.md)",
+	"name": "timeline-view",
+	"version": "0.2.0",
+	"description": "A lightweight timeline view for Obsidian Bases.",
 	"main": "main.js",
 	"type": "module",
 	"scripts": {

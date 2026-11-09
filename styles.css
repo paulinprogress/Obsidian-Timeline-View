@@ -267,6 +267,10 @@
 	opacity: 0;
 }
 
+.timeline-view.is-mobile .timeline-resize-handle {
+	display: none;
+}
+
 .timeline-entry:hover .timeline-resize-handle::after,
 .timeline-entry:focus-visible .timeline-resize-handle::after {
 	opacity: 0.7;

@@ -5,6 +5,7 @@ import {
 	BasesView,
 	DateValue,
 	Notice,
+	Platform,
 	QueryController,
 } from 'obsidian';
 
@@ -47,6 +48,16 @@ interface TimelineDrag {
 	deltaDays: number;
 }
 
+interface PendingTouch {
+	drag: TimelineDrag;
+	startX: number;
+	startY: number;
+	initialScrollLeft: number;
+	initialScrollTop: number;
+	holdTimer: number;
+	didScroll: boolean;
+}
+
 const TICK_INTERVALS: Array<{
 	unit: TickUnit;
 	step: number;
@@ -67,6 +78,7 @@ export class TimelineView extends BasesView {
 	type = 'timeline';
 	private readonly contentEl: HTMLElement;
 	private activeDrag: TimelineDrag | null = null;
+	private pendingTouch: PendingTouch | null = null;
 	private ignoreNextClick = false;
 	private dayWidth = DEFAULT_DAY_WIDTH;
 	private didInitialScrollToNow = false;
@@ -74,7 +86,9 @@ export class TimelineView extends BasesView {
 
 	constructor(controller: QueryController, containerEl: HTMLElement) {
 		super(controller);
-		this.contentEl = containerEl.createDiv({ cls: 'timeline-view' });
+		this.contentEl = containerEl.createDiv({
+			cls: `timeline-view${Platform.isMobile ? ' is-mobile' : ''}`,
+		});
 		this.registerDomEvent(this.contentEl, 'pointerdown', (event) =>
 			this.onPointerDown(event),
 		);
@@ -110,8 +124,11 @@ export class TimelineView extends BasesView {
 			this.didInitialScrollToNow && previousScroll != null;
 		this.contentEl.empty();
 
-		const startProperty = this.config.getAsPropertyId('startProperty');
-		if (!startProperty?.startsWith('note.')) {
+		const startProperties = getConfiguredPropertyIds(
+			this.config,
+			'startProperty',
+		);
+		if (startProperties.length === 0) {
 			this.renderEmptyState(
 				'Choose a start date',
 				'Open the view options and select a frontmatter property for the start date.',
@@ -119,16 +136,16 @@ export class TimelineView extends BasesView {
 			return;
 		}
 
-		const configuredEndProperty =
-			this.config.getAsPropertyId('endProperty');
-		const endProperty =
-			configuredEndProperty?.startsWith('note.')
-				? configuredEndProperty
-				: null;
+		const endProperties = getConfiguredPropertyIds(
+			this.config,
+			'endProperty',
+		);
 		const itemsByGroup = this.data.groupedData.map((group) => ({
 			group,
 			items: group.entries
-				.map((entry) => this.createItem(entry, startProperty, endProperty))
+				.map((entry) =>
+					this.createItem(entry, startProperties, endProperties),
+				)
 				.filter((item): item is TimelineItem => item !== null),
 		}));
 		const items = itemsByGroup.flatMap(({ items: groupItems }) => groupItems);
@@ -243,33 +260,26 @@ export class TimelineView extends BasesView {
 
 	private createItem(
 		entry: BasesEntry,
-		startProperty: BasesPropertyId,
-		endProperty: BasesPropertyId | null,
+		startProperties: BasesPropertyId[],
+		endProperties: BasesPropertyId[],
 	): TimelineItem | null {
-		const startValue = entry.getValue(startProperty);
-		if (!startValue) return null;
-
-		const startLabel = startValue.toString();
-		const startDay = parseDay(startLabel);
-		if (startDay === null) return null;
-
-		const endValue = endProperty ? entry.getValue(endProperty) : null;
-		const endLabel = endValue?.toString() ?? null;
-		const parsedEndDay = endLabel ? parseDay(endLabel) : null;
-		const hasValidEnd = parsedEndDay !== null;
+		const start = getFirstDateValue(entry, startProperties);
+		if (!start) return null;
+		const end = getFirstDateValue(
+			entry,
+			endProperties.filter((property) => property !== start.property),
+		);
 
 		return {
 			entry,
-			startProperty,
-			endProperty: hasValidEnd ? endProperty : null,
-			startValue: startLabel,
-			endValue: hasValidEnd ? endLabel : null,
-			startDay,
-			endDay: hasValidEnd
-				? Math.max(startDay, parsedEndDay)
-				: startDay,
-			startLabel,
-			endLabel: hasValidEnd ? endLabel ?? startLabel : startLabel,
+			startProperty: start.property,
+			endProperty: end?.property ?? null,
+			startValue: start.value,
+			endValue: end?.value ?? null,
+			startDay: start.day,
+			endDay: end ? Math.max(start.day, end.day) : start.day,
+			startLabel: start.value,
+			endLabel: end?.value ?? start.value,
 		};
 	}
 
@@ -418,6 +428,7 @@ export class TimelineView extends BasesView {
 		if (!item) return;
 
 		const handle = event.target.closest('.timeline-resize-handle');
+		if (Platform.isMobile && event.pointerType === 'touch' && handle) return;
 		const mode: DragMode = handle?.classList.contains('timeline-resize-handle-start')
 			? 'start'
 			: handle?.classList.contains('timeline-resize-handle-end')
@@ -425,7 +436,7 @@ export class TimelineView extends BasesView {
 				: 'move';
 		if (mode !== 'move' && !item.endProperty) return;
 
-		this.activeDrag = {
+		const drag: TimelineDrag = {
 			item,
 			element: entry,
 			mode,
@@ -436,11 +447,57 @@ export class TimelineView extends BasesView {
 			didMove: false,
 			deltaDays: 0,
 		};
+		if (Platform.isMobile && event.pointerType === 'touch') {
+			const scroll = entry.closest<HTMLElement>('.timeline-scroll');
+			if (!scroll) return;
+			const pending: PendingTouch = {
+				drag,
+				startX: event.clientX,
+				startY: event.clientY,
+				initialScrollLeft: scroll.scrollLeft,
+				initialScrollTop: scroll.scrollTop,
+				holdTimer: 0,
+				didScroll: false,
+			};
+			pending.holdTimer = window.setTimeout(() => {
+				if (this.pendingTouch !== pending) return;
+				this.pendingTouch = null;
+				this.activeDrag = drag;
+				entry.setPointerCapture(event.pointerId);
+			}, 450);
+			this.pendingTouch = pending;
+			return;
+		}
+
+		this.activeDrag = drag;
 		entry.setPointerCapture(event.pointerId);
 		event.preventDefault();
 	}
 
 	private onPointerMove(event: PointerEvent) {
+		const pending = this.pendingTouch;
+		if (pending?.drag.pointerId === event.pointerId) {
+			const distanceX = event.clientX - pending.startX;
+			const distanceY = event.clientY - pending.startY;
+			if (
+				!pending.didScroll &&
+				(Math.abs(distanceX) > 8 || Math.abs(distanceY) > 8)
+			) {
+				window.clearTimeout(pending.holdTimer);
+				pending.didScroll = true;
+			}
+			if (pending.didScroll) {
+				const scroll =
+					pending.drag.element.closest<HTMLElement>('.timeline-scroll');
+				if (scroll) {
+					scroll.scrollLeft = pending.initialScrollLeft - distanceX;
+					scroll.scrollTop = pending.initialScrollTop - distanceY;
+				}
+				event.preventDefault();
+			}
+			return;
+		}
+
 		const drag = this.activeDrag;
 		if (!drag || drag.pointerId !== event.pointerId) return;
 
@@ -453,12 +510,19 @@ export class TimelineView extends BasesView {
 	}
 
 	private onPointerUp(event: PointerEvent) {
+		const pending = this.pendingTouch;
+		if (pending?.drag.pointerId === event.pointerId) {
+			window.clearTimeout(pending.holdTimer);
+			this.pendingTouch = null;
+			if (pending.didScroll) this.ignoreClickOnce();
+			return;
+		}
+
 		const drag = this.activeDrag;
 		if (!drag || drag.pointerId !== event.pointerId) return;
 		this.activeDrag = null;
 		drag.element.removeClass('is-dragging');
-		this.ignoreNextClick = true;
-		window.setTimeout(() => (this.ignoreNextClick = false), 0);
+		this.ignoreClickOnce();
 
 		if (!drag.didMove || drag.deltaDays === 0) {
 			this.openEntry(drag.item);
@@ -468,10 +532,19 @@ export class TimelineView extends BasesView {
 	}
 
 	private cancelDrag() {
+		if (this.pendingTouch) {
+			window.clearTimeout(this.pendingTouch.holdTimer);
+			this.pendingTouch = null;
+		}
 		if (!this.activeDrag) return;
 		this.activeDrag.element.removeClass('is-dragging');
 		this.activeDrag = null;
 		this.render();
+	}
+
+	private ignoreClickOnce() {
+		this.ignoreNextClick = true;
+		window.setTimeout(() => (this.ignoreNextClick = false), 0);
 	}
 
 	private updateDraggedPosition(drag: TimelineDrag) {
@@ -546,18 +619,20 @@ export class TimelineView extends BasesView {
 
 	private findItem(path: string | undefined) {
 		if (!path) return null;
-		const startProperty = this.config.getAsPropertyId('startProperty');
-		if (!startProperty?.startsWith('note.')) return null;
-		const endProperty = this.config.getAsPropertyId('endProperty');
+		const startProperties = getConfiguredPropertyIds(
+			this.config,
+			'startProperty',
+		);
+		if (startProperties.length === 0) return null;
+		const endProperties = getConfiguredPropertyIds(
+			this.config,
+			'endProperty',
+		);
 		const entry = this.data.data.find(
 			(candidate) => candidate.file.path === path,
 		);
 		return entry
-			? this.createItem(
-					entry,
-					startProperty,
-					endProperty?.startsWith('note.') ? endProperty : null,
-				)
+			? this.createItem(entry, startProperties, endProperties)
 			: null;
 	}
 
@@ -631,6 +706,40 @@ export class TimelineView extends BasesView {
 		const position = (day - this.timelineStartDay) * this.dayWidth;
 		scroll.scrollLeft = Math.max(0, position - scroll.clientWidth * viewportFraction);
 	}
+}
+
+function getConfiguredPropertyIds(
+	config: TimelineView['config'],
+	keyPrefix: string,
+): BasesPropertyId[] {
+	const properties: BasesPropertyId[] = [];
+	for (let index = 0; ; index++) {
+		const key = index === 0 ? keyPrefix : `${keyPrefix}${index + 1}`;
+		const property = config.getAsPropertyId(key);
+		if (property?.startsWith('note.')) {
+			properties.push(property);
+			continue;
+		}
+		const nextProperty = config.getAsPropertyId(
+			`${keyPrefix}${index + 2}`,
+		);
+		if (!nextProperty?.startsWith('note.')) break;
+	}
+	return properties;
+}
+
+function getFirstDateValue(
+	entry: BasesEntry,
+	properties: BasesPropertyId[],
+) {
+	for (const property of properties) {
+		const value = entry.getValue(property);
+		if (!value) continue;
+		const label = value.toString();
+		const day = parseDay(label);
+		if (day !== null) return { property, value: label, day };
+	}
+	return null;
 }
 
 function parseDay(value: string) {
